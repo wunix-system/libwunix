@@ -1,0 +1,9 @@
+[package]
+name = "libwunix"
+version = "0.1.0"
+edition = "2024"
+authors = ["Valdis"]
+description = "Системная библиотека рантайма Rust для пространства пользователя (Ring 3) операционной системы Wunix"
+license = "MIT"
+
+[dependencies]
