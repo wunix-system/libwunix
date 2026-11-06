@@ -44,9 +44,16 @@ pub fn resolve_host(name: &str) -> Result<[u8; 4], DnsError> {
         return Ok(ip);
     }
 
-    // 4. Запрашиваем активный DNS-сервер
-    let nameserver = get_default_nameserver();
-    query_dns_server(nameserver, trimmed)
+    // 4. Запрашиваем активные DNS-серверы с поддержкой fallback
+    let (nameservers, count) = resolv_conf::get_nameservers();
+    let mut last_err = DnsError::Timeout;
+    for i in 0..count {
+        match query_dns_server(nameservers[i], trimmed) {
+            Ok(ip) => return Ok(ip),
+            Err(e) => last_err = e,
+        }
+    }
+    Err(last_err)
 }
 
 /// Разрешает имя хоста с явным указанием целевого DNS-сервера (для утилит nslookup/host).

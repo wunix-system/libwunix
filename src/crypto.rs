@@ -277,4 +277,89 @@ pub fn generate_salt(seed: u64, out: &mut [u8; 8]) {
     }
 }
 
+// Таблица предвычисленных полиномов IEEE 802.3 (0xEDB88320).
+// Генерируется на этапе компиляции через const fn, гарантируя нулевые накладные расходы рантайма.
+const fn make_crc_table() -> [u32; 256] {
+    let mut table = [0u32; 256];
+    let mut i = 0usize;
+    while i < 256 {
+        let mut c = i as u32;
+        let mut j = 0;
+        while j < 8 {
+            if (c & 1) != 0 {
+                c = (c >> 1) ^ 0xEDB88320;
+            } else {
+                c >>= 1;
+            }
+            j += 1;
+        }
+        table[i] = c;
+        i += 1;
+    }
+    table
+}
+
+pub static CRC32_TABLE: [u32; 256] = make_crc_table();
+
+// Потоковый расчёт контрольной суммы CRC-32 (IEEE 802.3).
+// Используется архиваторами ZIP, GZIP, RAR и протоколами передачи данных.
+#[derive(Clone, Copy, Debug)]
+pub struct Crc32 {
+    state: u32,
+}
+
+impl Default for Crc32 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Crc32 {
+    #[inline]
+    pub const fn new() -> Self {
+        Self { state: 0xFFFF_FFFF }
+    }
+
+    #[inline]
+    pub fn update(&mut self, data: &[u8]) {
+        for &byte in data {
+            let idx = ((self.state ^ (byte as u32)) & 0xFF) as usize;
+            self.state = (self.state >> 8) ^ CRC32_TABLE[idx];
+        }
+    }
+
+    #[inline]
+    pub fn finish(&self) -> u32 {
+        self.state ^ 0xFFFF_FFFF
+    }
+}
+
+// Вычисляет CRC-32 для единого среза данных
+pub fn crc32(data: &[u8]) -> u32 {
+    let mut hasher = Crc32::new();
+    hasher.update(data);
+    hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_crc32_standard_vector() {
+        assert_eq!(crc32(b""), 0x00000000);
+        assert_eq!(crc32(b"123456789"), 0xCBF43926);
+        assert_eq!(crc32(b"hello world"), 0x0D4A1185);
+    }
+
+    #[test]
+    fn test_crc32_streaming_matches_slice() {
+        let mut hasher = Crc32::new();
+        hasher.update(b"12345");
+        hasher.update(b"6789");
+        assert_eq!(hasher.finish(), 0xCBF43926);
+    }
+}
+
+
 

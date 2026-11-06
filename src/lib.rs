@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
+pub mod compression;
 pub mod crypto;
 pub mod env;
 pub mod errno;
@@ -12,7 +13,11 @@ pub mod syslib;
 pub mod terminal;
 pub mod time;
 
-pub use crypto::{hash_password, sha256, verify_password_hash};
+pub use compression::{
+    deflate_fixed, deflate_store, gzip_compress, gzip_decompress, inflate, CompressionError,
+    GzipHeader,
+};
+pub use crypto::{crc32, hash_password, sha256, verify_password_hash, Crc32};
 pub use errno::{check, Errno};
 pub use i18n::{current_language, t, Language};
 pub use terminal::{read_line, read_password_masked};
