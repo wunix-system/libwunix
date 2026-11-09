@@ -6,6 +6,26 @@ pub enum LineMode {
     Masked(u8),
 }
 
+/// Вставляет пробелы до ближайшей позиции табуляции tab_stop (по умолчанию 4/8 символов).
+/// Возвращает количество фактически добавленных пробелов.
+pub fn insert_tab(buf: &mut [u8], total: &mut usize, tab_stop: usize) -> usize {
+    if tab_stop == 0 || *total >= buf.len() {
+        return 0;
+    }
+    let spaces = tab_stop - (*total % tab_stop);
+    let mut added = 0;
+    for _ in 0..spaces {
+        if *total < buf.len() {
+            buf[*total] = b' ';
+            *total += 1;
+            added += 1;
+        } else {
+            break;
+        }
+    }
+    added
+}
+
 /// Удаляет байты последнего введенного символа из буфера.
 /// Корректно учитывает как однобайтовые ASCII символы, так и многобайтовую кодировку
 /// UTF-8 (например, кириллицу), где символ состоит из лидирующего байта и байтов продолжения.
@@ -81,6 +101,24 @@ pub fn read_line_with_mode<'a>(buf: &'a mut [u8], mode: LineMode) -> Option<&'a 
             continue;
         }
 
+        // Поддержка табуляции (Tab, 0x09) — выравниваем пробелами до границы 4 знакомест
+        if byte == b'\t' {
+            let added = insert_tab(buf, &mut total, 4);
+            match mode {
+                LineMode::Echo => {
+                    for _ in 0..added {
+                        write(STDOUT_FILENO, b" ");
+                    }
+                }
+                LineMode::Masked(mask) => {
+                    for _ in 0..added {
+                        write(STDOUT_FILENO, &[mask]);
+                    }
+                }
+            }
+            continue;
+        }
+
         // Игнорируем остальные непечатные управляющие коды
         if byte < 0x20 {
             continue;
@@ -147,5 +185,24 @@ mod tests {
 
         assert!(pop_last_char_bytes(&buf, &mut total));
         assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn test_insert_tab_alignment() {
+        let mut buf = [0u8; 16];
+        let mut total = 2; // "ab"
+        buf[0] = b'a';
+        buf[1] = b'b';
+
+        let added = insert_tab(&mut buf, &mut total, 4);
+        assert_eq!(added, 2);
+        assert_eq!(total, 4);
+        assert_eq!(&buf[..total], b"ab  ");
+
+        // От 4 до 8 должно добавить 4 пробела
+        let added2 = insert_tab(&mut buf, &mut total, 4);
+        assert_eq!(added2, 4);
+        assert_eq!(total, 8);
+        assert_eq!(&buf[..total], b"ab      ");
     }
 }
