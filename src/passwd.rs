@@ -322,7 +322,9 @@ pub fn get_passwd_by_uid(uid: u32) -> Result<Option<PasswdEntry>, AuthError> {
 pub fn get_next_uid() -> Result<u32, AuthError> {
     let mut max_uid = 999u32;
     for_each_passwd(|e| {
-        if e.uid >= 1000 && e.uid > max_uid {
+        // Диапазон стандартных пользователей: 1000..60000.
+        // Исключаем системного nobody (65534) и спец-аккаунты выше 60000.
+        if e.uid >= 1000 && e.uid < 60000 && e.uid > max_uid {
             max_uid = e.uid;
         }
         true
