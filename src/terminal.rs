@@ -47,10 +47,40 @@ pub fn pop_last_char_bytes(buf: &[u8], total: &mut usize) -> bool {
     true
 }
 
+struct TermiosGuard {
+    orig: crate::Termios,
+    active: bool,
+}
+
+impl TermiosGuard {
+    fn enter_raw() -> Self {
+        let mut orig = crate::Termios::default();
+        if crate::tcgetattr(STDIN_FILENO, &mut orig) != 0 {
+            return Self { orig, active: false };
+        }
+        let mut raw = orig;
+        raw.c_lflag &= !(crate::ECHO | crate::ICANON | crate::ISIG | crate::IEXTEN);
+        raw.c_iflag &= !(crate::IXON | crate::ICRNL);
+        raw.c_cc[crate::VMIN] = 1;
+        raw.c_cc[crate::VTIME] = 0;
+        let active = crate::tcsetattr(STDIN_FILENO, 0, &raw) == 0;
+        Self { orig, active }
+    }
+}
+
+impl Drop for TermiosGuard {
+    fn drop(&mut self) {
+        if self.active {
+            crate::tcsetattr(STDIN_FILENO, 0, &self.orig);
+        }
+    }
+}
+
 /// Считывает одну строку из стандартного ввода STDIN_FILENO.
 /// Для обычного ввода (Echo) отображает символы как есть.
 /// Для скрытого пароля с маскировкой (Masked) отображает заданный символ (например, '*').
 pub fn read_line_with_mode<'a>(buf: &'a mut [u8], mode: LineMode) -> Option<&'a str> {
+    let _guard = TermiosGuard::enter_raw();
     let mut total = 0;
     while total < buf.len() {
         let mut b = [0u8; 1];

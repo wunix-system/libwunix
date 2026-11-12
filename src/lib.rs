@@ -117,7 +117,9 @@ pub const SYS_SETSID: u64 = 112;
 pub const SYS_GETPGID: u64 = 121;
 pub const SYS_STATFS: u64 = 137;
 pub const SYS_LSTAT: u64 = 6;
+pub const AT_FDCWD: i64 = -100;
 pub const AT_SYMLINK_NOFOLLOW: u64 = 0x100;
+pub const RENAME_NOREPLACE: u32 = 1;
 pub const SYS_NEWFSTATAT: u64 = 262;
 pub const SYS_SYNC: u64 = 162;
 pub const SYS_SETTIMEOFDAY: u64 = 164;
@@ -130,6 +132,7 @@ pub const SYS_CLOCK_GETTIME: u64 = 228;
 pub const SYS_ACCEPT4: u64 = 288;
 pub const SYS_DUP3: u64 = 292;
 pub const SYS_PRLIMIT64: u64 = 302;
+pub const SYS_RENAMEAT2: u64 = 316;
 
 pub const LINUX_REBOOT_MAGIC1: u64 = 0xfee1dead;
 pub const LINUX_REBOOT_MAGIC2: u64 = 672274793;
@@ -563,6 +566,19 @@ pub fn rename(oldpath: &[u8], newpath: &[u8]) -> i64 {
     unsafe { syscall2(SYS_RENAME, oldpath.as_ptr() as u64, newpath.as_ptr() as u64) as i64 }
 }
 
+pub fn renameat2(olddirfd: i64, oldpath: &[u8], newdirfd: i64, newpath: &[u8], flags: u32) -> i64 {
+    unsafe {
+        syscall5(
+            SYS_RENAMEAT2,
+            olddirfd as u64,
+            oldpath.as_ptr() as u64,
+            newdirfd as u64,
+            newpath.as_ptr() as u64,
+            flags as u64,
+        ) as i64
+    }
+}
+
 pub fn symlink(target: &[u8], linkpath: &[u8]) -> i64 {
     unsafe { syscall2(SYS_SYMLINK, target.as_ptr() as u64, linkpath.as_ptr() as u64) as i64 }
 }
@@ -679,6 +695,77 @@ pub struct WinSize {
 
 pub fn ioctl(fd: u64, cmd: u64, arg: u64) -> i64 {
     unsafe { syscall3(SYS_IOCTL, fd, cmd, arg) as i64 }
+}
+
+pub const TCGETS: u64 = 0x5401;
+pub const TCSETS: u64 = 0x5402;
+pub const TCSETSW: u64 = 0x5403;
+pub const TCSETSF: u64 = 0x5404;
+
+pub const IGNBRK: u32 = 0o000001;
+pub const BRKINT: u32 = 0o000002;
+pub const IGNPAR: u32 = 0o000004;
+pub const PARMRK: u32 = 0o000010;
+pub const INPCK: u32 = 0o000020;
+pub const ISTRIP: u32 = 0o000040;
+pub const INLCR: u32 = 0o000100;
+pub const IGNCR: u32 = 0o000200;
+pub const ICRNL: u32 = 0o000400;
+pub const IXON: u32 = 0o002000;
+pub const IXANY: u32 = 0o004000;
+pub const IXOFF: u32 = 0o010000;
+
+pub const OPOST: u32 = 0o000001;
+pub const ONLCR: u32 = 0o000004;
+
+pub const CS8: u32 = 0o000060;
+pub const CREAD: u32 = 0o000200;
+
+pub const ISIG: u32 = 0o000001;
+pub const ICANON: u32 = 0o000002;
+pub const ECHO: u32 = 0o000010;
+pub const ECHOE: u32 = 0o000020;
+pub const ECHOK: u32 = 0o000040;
+pub const ECHONL: u32 = 0o000100;
+pub const NOFLSH: u32 = 0o000200;
+pub const TOSTOP: u32 = 0o000400;
+pub const IEXTEN: u32 = 0o100000;
+
+pub const VINTR: usize = 0;
+pub const VQUIT: usize = 1;
+pub const VERASE: usize = 2;
+pub const VKILL: usize = 3;
+pub const VEOF: usize = 4;
+pub const VTIME: usize = 5;
+pub const VMIN: usize = 6;
+pub const VSTART: usize = 8;
+pub const VSTOP: usize = 9;
+pub const VSUSP: usize = 10;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Termios {
+    pub c_iflag: u32,
+    pub c_oflag: u32,
+    pub c_cflag: u32,
+    pub c_lflag: u32,
+    pub c_line: u8,
+    pub c_cc: [u8; 32],
+    pub c_ispeed: u32,
+    pub c_ospeed: u32,
+}
+
+pub fn tcgetattr(fd: u64, tio: &mut Termios) -> i64 {
+    ioctl(fd, TCGETS, tio as *mut Termios as u64)
+}
+
+pub fn tcsetattr(fd: u64, _optional_actions: i32, tio: &Termios) -> i64 {
+    ioctl(fd, TCSETS, tio as *const Termios as u64)
+}
+
+pub fn isatty(fd: u64) -> bool {
+    let mut tio = Termios::default();
+    tcgetattr(fd, &mut tio) == 0
 }
 
 pub fn get_terminal_size() -> (usize, usize) {
