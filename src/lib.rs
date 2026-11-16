@@ -72,6 +72,7 @@ pub const SYS_SOCKET: u64 = 41;
 pub const SYS_CONNECT: u64 = 42;
 pub const SYS_ACCEPT: u64 = 43;
 pub const SYS_SENDTO: u64 = 44;
+pub const SYS_PIPE: u64 = 22;
 pub const SYS_RECVFROM: u64 = 45;
 pub const SYS_SENDMSG: u64 = 46;
 pub const SYS_RECVMSG: u64 = 47;
@@ -82,9 +83,11 @@ pub const SYS_GETSOCKNAME: u64 = 51;
 pub const SYS_GETPEERNAME: u64 = 52;
 pub const SYS_SETSOCKOPT: u64 = 54;
 pub const SYS_GETSOCKOPT: u64 = 55;
+pub const SYS_FORK: u64 = 57;
 pub const SYS_EXECVE: u64 = 59;
 pub const SYS_EXIT: u64 = 60;
 pub const SYS_WAIT4: u64 = 61;
+pub const SYS_PIPE2: u64 = 293;
 pub const SYS_UNAME: u64 = 63;
 pub const SYS_TRUNCATE: u64 = 76;
 pub const SYS_FTRUNCATE: u64 = 77;
@@ -645,6 +648,14 @@ pub fn setsid() -> i64 {
 
 pub fn wait4(pid: i64, status: *mut i32, options: u32) -> i64 {
     unsafe { syscall4(SYS_WAIT4, pid as u64, status as u64, options as u64, 0) as i64 }
+}
+
+pub fn fork() -> i64 {
+    unsafe { syscall0(SYS_FORK) as i64 }
+}
+
+pub fn pipe2(fds: &mut [i32; 2], flags: u32) -> i64 {
+    unsafe { syscall2(SYS_PIPE2, fds.as_mut_ptr() as u64, flags as u64) as i64 }
 }
 
 pub fn shutdown(fd: u64, how: u32) -> i64 {
