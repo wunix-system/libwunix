@@ -694,6 +694,7 @@ pub fn poll(fds: *mut u8, nfds: u64, timeout_ms: i64) -> i64 {
 }
 
 pub const TIOCGWINSZ: u64 = 0x5413;
+pub const FIONREAD: u64 = 0x541B;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
@@ -785,6 +786,15 @@ pub fn get_terminal_size() -> (usize, usize) {
         (ws.ws_col as usize, ws.ws_row as usize)
     } else {
         (80, 24)
+    }
+}
+
+pub fn stdin_bytes_available() -> usize {
+    let mut count: i32 = 0;
+    if ioctl(0, FIONREAD, &mut count as *mut i32 as u64) == 0 && count > 0 {
+        count as usize
+    } else {
+        0
     }
 }
 
