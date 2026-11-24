@@ -19,7 +19,7 @@ pub use compression::{
 };
 pub use crypto::{crc32, hash_password, sha256, verify_password_hash, Crc32};
 pub use errno::{check, Errno};
-pub use i18n::{current_language, t, Language};
+pub use i18n::{current_language, current_locale, dgettext, gettext, set_locale, t, tr, Language};
 pub use terminal::{read_line, read_password_masked};
 pub use net::{
     flush_dns_cache, for_each_cache_entry, get_default_nameserver, lookup_hosts_file,
