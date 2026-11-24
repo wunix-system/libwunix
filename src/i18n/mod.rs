@@ -64,18 +64,23 @@ pub fn dgettext(domain: &str, msgid: &'static str) -> &'static str {
 }
 
 /// Совместимая функция выбора перевода пары строк (RU / EN).
-/// При переключении на третий язык (не русский и не английский, например de, fr)
-/// пытается найти перевод английской строки в каталоге этого языка!
+/// Сначала пытается найти перевод для активной локали в загруженном каталоге,
+/// а при его отсутствии использует fallback по коду языка (RU или EN).
 #[inline]
 pub fn t(ru: &'static str, en: &'static str) -> &'static str {
     let loc = get_active_locale();
+    if loc.starts_with("en") || loc.starts_with("EN") {
+        return en;
+    }
+    if let Some(trans) = catalog::lookup_message(en, "wunix")
+        .or_else(|| catalog::lookup_message(ru, "wunix"))
+    {
+        return trans;
+    }
     if loc.starts_with("ru") || loc.starts_with("RU") {
         ru
-    } else if loc.starts_with("en") || loc.starts_with("EN") {
-        en
     } else {
-        // Третий язык (например немецкий, французский): переводим через каталог!
-        tr(en)
+        en
     }
 }
 
