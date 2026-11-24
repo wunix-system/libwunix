@@ -35,6 +35,19 @@ pub use passwd::{
     ShadowEntry,
 };
 
+/// Инициализирует системное окружение процесса (переменные envp и активную локаль).
+/// Вызывается первой строкой в точке входа `_start` каждой программы.
+pub fn init(argc: isize, argv: *const *const u8) {
+    if argc > 0 && !argv.is_null() {
+        unsafe {
+            let envp = argv.add(argc as usize + 1);
+            env::init(envp);
+        }
+        i18n::locale::reset_locale_cache();
+        i18n::reload_catalog();
+    }
+}
+
 // Стандартные файловые дескрипторы POSIX
 pub const STDIN_FILENO: u64 = 0;
 pub const STDOUT_FILENO: u64 = 1;
