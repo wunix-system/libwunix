@@ -1,0 +1,17 @@
+[package]
+name = "libwunix"
+version = "auto"
+arch = "x86_64"
+type = "system"
+tier = "critical"
+description = "Системная библиотека системных вызовов Ring 3 и базовый runtime"
+maintainer = "Wunix Core Team <dev@wunix.org>"
+
+[dependencies]
+required = []
+conflicts = []
+replaces = []
+
+[build]
+version_source = "git:wunix/libs/libwunix"
+kind = "libwunix"
