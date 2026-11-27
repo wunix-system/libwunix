@@ -2,6 +2,7 @@
 
 pub mod compression;
 pub mod crypto;
+pub mod drv;
 pub mod env;
 pub mod errno;
 pub mod fmt;
@@ -61,6 +62,41 @@ pub const O_CREAT: u32 = 0x40;
 pub const O_EXCL: u32 = 0x80;
 pub const O_TRUNC: u32 = 0x200;
 pub const O_APPEND: u32 = 0x400;
+pub const O_NONBLOCK: u32 = 0x800;
+pub const O_CLOEXEC: u32 = 0x80000;
+
+pub const PROT_NONE: u64 = 0x0;
+pub const PROT_READ: u64 = 0x1;
+pub const PROT_WRITE: u64 = 0x2;
+pub const PROT_EXEC: u64 = 0x4;
+
+pub const MAP_SHARED: u64 = 0x01;
+pub const MAP_PRIVATE: u64 = 0x02;
+pub const MAP_FIXED: u64 = 0x10;
+pub const MAP_ANONYMOUS: u64 = 0x20;
+pub const MAP_FAILED: usize = usize::MAX;
+
+pub const EPOLLIN: u32 = 0x001;
+pub const EPOLLOUT: u32 = 0x004;
+pub const EPOLLERR: u32 = 0x008;
+pub const EPOLLHUP: u32 = 0x010;
+pub const EPOLLET: u32 = 1 << 31;
+
+pub const EPOLL_CTL_ADD: u32 = 1;
+pub const EPOLL_CTL_DEL: u32 = 2;
+pub const EPOLL_CTL_MOD: u32 = 3;
+pub const EPOLL_CLOEXEC: u32 = 0x80000;
+
+pub const EFD_SEMAPHORE: u32 = 1;
+pub const EFD_NONBLOCK: u32 = 0x800;
+pub const EFD_CLOEXEC: u32 = 0x80000;
+
+pub const F_DUPFD: u64 = 0;
+pub const F_GETFD: u64 = 1;
+pub const F_SETFD: u64 = 2;
+pub const F_GETFL: u64 = 3;
+pub const F_SETFL: u64 = 4;
+pub const F_DUPFD_CLOEXEC: u64 = 1030;
 
 // Номера системных вызовов Wunix (совместимы с Linux x86_64 ABI)
 pub const SYS_READ: u64 = 0;
@@ -69,6 +105,12 @@ pub const SYS_OPEN: u64 = 2;
 pub const SYS_CLOSE: u64 = 3;
 pub const SYS_POLL: u64 = 7;
 pub const SYS_LSEEK: u64 = 8;
+pub const SYS_MMAP: u64 = 9;
+pub const SYS_MPROTECT: u64 = 10;
+pub const SYS_MUNMAP: u64 = 11;
+pub const SYS_BRK: u64 = 12;
+pub const SYS_RT_SIGACTION: u64 = 13;
+pub const SYS_RT_SIGPROCMASK: u64 = 14;
 pub const SYS_IOCTL: u64 = 16;
 pub const SYS_PREAD64: u64 = 17;
 pub const SYS_PWRITE64: u64 = 18;
@@ -94,14 +136,17 @@ pub const SYS_BIND: u64 = 49;
 pub const SYS_LISTEN: u64 = 50;
 pub const SYS_GETSOCKNAME: u64 = 51;
 pub const SYS_GETPEERNAME: u64 = 52;
+pub const SYS_SOCKETPAIR: u64 = 53;
 pub const SYS_SETSOCKOPT: u64 = 54;
 pub const SYS_GETSOCKOPT: u64 = 55;
 pub const SYS_FORK: u64 = 57;
 pub const SYS_EXECVE: u64 = 59;
 pub const SYS_EXIT: u64 = 60;
 pub const SYS_WAIT4: u64 = 61;
+pub const SYS_KILL: u64 = 62;
 pub const SYS_PIPE2: u64 = 293;
 pub const SYS_UNAME: u64 = 63;
+pub const SYS_FCNTL: u64 = 72;
 pub const SYS_TRUNCATE: u64 = 76;
 pub const SYS_FTRUNCATE: u64 = 77;
 pub const SYS_GETCWD: u64 = 79;
@@ -145,10 +190,16 @@ pub const SYS_REBOOT: u64 = 169;
 pub const SYS_GETDENTS64: u64 = 217;
 pub const SYS_CLOCK_SETTIME: u64 = 227;
 pub const SYS_CLOCK_GETTIME: u64 = 228;
+pub const SYS_EPOLL_WAIT: u64 = 232;
+pub const SYS_EPOLL_CTL: u64 = 233;
+pub const SYS_OPENAT: u64 = 257;
 pub const SYS_ACCEPT4: u64 = 288;
+pub const SYS_EVENTFD2: u64 = 290;
+pub const SYS_EPOLL_CREATE1: u64 = 291;
 pub const SYS_DUP3: u64 = 292;
 pub const SYS_PRLIMIT64: u64 = 302;
 pub const SYS_RENAMEAT2: u64 = 316;
+pub const SYS_MEMFD_CREATE: u64 = 319;
 
 pub const LINUX_REBOOT_MAGIC1: u64 = 0xfee1dead;
 pub const LINUX_REBOOT_MAGIC2: u64 = 672274793;
@@ -780,12 +831,43 @@ pub struct Termios {
     pub c_ospeed: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+struct KernelTermios {
+    c_iflag: u32,
+    c_oflag: u32,
+    c_cflag: u32,
+    c_lflag: u32,
+    c_line: u8,
+    c_cc: [u8; 19],
+}
+
 pub fn tcgetattr(fd: u64, tio: &mut Termios) -> i64 {
-    ioctl(fd, TCGETS, tio as *mut Termios as u64)
+    let mut k = KernelTermios::default();
+    let res = ioctl(fd, TCGETS, &mut k as *mut KernelTermios as u64);
+    if res == 0 {
+        tio.c_iflag = k.c_iflag;
+        tio.c_oflag = k.c_oflag;
+        tio.c_cflag = k.c_cflag;
+        tio.c_lflag = k.c_lflag;
+        tio.c_line = k.c_line;
+        tio.c_cc = [0u8; 32];
+        tio.c_cc[..19].copy_from_slice(&k.c_cc);
+    }
+    res
 }
 
 pub fn tcsetattr(fd: u64, _optional_actions: i32, tio: &Termios) -> i64 {
-    ioctl(fd, TCSETS, tio as *const Termios as u64)
+    let mut k = KernelTermios {
+        c_iflag: tio.c_iflag,
+        c_oflag: tio.c_oflag,
+        c_cflag: tio.c_cflag,
+        c_lflag: tio.c_lflag,
+        c_line: tio.c_line,
+        c_cc: [0u8; 19],
+    };
+    k.c_cc.copy_from_slice(&tio.c_cc[..19]);
+    ioctl(fd, TCSETS, &k as *const KernelTermios as u64)
 }
 
 pub fn isatty(fd: u64) -> bool {
@@ -965,6 +1047,104 @@ pub fn gettimeofday(tv: *mut time::Timeval, tz: *mut time::Timezone) -> i64 {
 
 pub fn settimeofday(tv: *const time::Timeval, tz: *const time::Timezone) -> i64 {
     unsafe { syscall2(SYS_SETTIMEOFDAY, tv as u64, tz as u64) as i64 }
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EpollEvent {
+    pub events: u32,
+    pub data: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SigAction {
+    pub sa_handler: u64,
+    pub sa_flags: u64,
+    pub sa_restorer: u64,
+    pub sa_mask: u64,
+}
+
+pub unsafe fn mmap(
+    addr: usize,
+    len: usize,
+    prot: u64,
+    flags: u64,
+    fd: i64,
+    offset: u64,
+) -> isize {
+    unsafe { syscall6(SYS_MMAP, addr as u64, len as u64, prot, flags, fd as u64, offset) as isize }
+}
+
+pub unsafe fn munmap(addr: usize, len: usize) -> i64 {
+    unsafe { syscall2(SYS_MUNMAP, addr as u64, len as u64) as i64 }
+}
+
+pub unsafe fn mprotect(addr: usize, len: usize, prot: u64) -> i64 {
+    unsafe { syscall3(SYS_MPROTECT, addr as u64, len as u64, prot) as i64 }
+}
+
+pub fn brk(addr: usize) -> usize {
+    unsafe { syscall1(SYS_BRK, addr as u64) as usize }
+}
+
+pub fn epoll_create1(flags: u32) -> i64 {
+    unsafe { syscall1(SYS_EPOLL_CREATE1, flags as u64) as i64 }
+}
+
+pub fn epoll_ctl(epfd: u64, op: u32, fd: u64, event: Option<&mut EpollEvent>) -> i64 {
+    let ptr = event.map_or(0, |e| e as *mut EpollEvent as u64);
+    unsafe { syscall4(SYS_EPOLL_CTL, epfd, op as u64, fd, ptr) as i64 }
+}
+
+pub fn epoll_wait(epfd: u64, events: &mut [EpollEvent], timeout_ms: i32) -> i64 {
+    unsafe {
+        syscall4(
+            SYS_EPOLL_WAIT,
+            epfd,
+            events.as_mut_ptr() as u64,
+            events.len() as u64,
+            timeout_ms as i64 as u64,
+        ) as i64
+    }
+}
+
+pub fn eventfd2(initval: u32, flags: u32) -> i64 {
+    unsafe { syscall2(SYS_EVENTFD2, initval as u64, flags as u64) as i64 }
+}
+
+pub fn fcntl(fd: u64, cmd: u64, arg: u64) -> i64 {
+    unsafe { syscall3(SYS_FCNTL, fd, cmd, arg) as i64 }
+}
+
+pub fn kill(pid: i64, sig: u64) -> i64 {
+    unsafe { syscall2(SYS_KILL, pid as u64, sig) as i64 }
+}
+
+pub fn rt_sigaction(sig: u64, act: Option<&SigAction>, oldact: Option<&mut SigAction>) -> i64 {
+    let a = act.map_or(0, |p| p as *const SigAction as u64);
+    let o = oldact.map_or(0, |p| p as *mut SigAction as u64);
+    unsafe { syscall4(SYS_RT_SIGACTION, sig, a, o, 8) as i64 }
+}
+
+pub fn openat(dirfd: i64, path: &[u8], flags: u32, mode: u32) -> i64 {
+    unsafe { syscall4(SYS_OPENAT, dirfd as u64, path.as_ptr() as u64, flags as u64, mode as u64) as i64 }
+}
+
+pub fn memfd_create(name: &[u8], flags: u32) -> i64 {
+    unsafe { syscall2(SYS_MEMFD_CREATE, name.as_ptr() as u64, flags as u64) as i64 }
+}
+
+pub fn socketpair(domain: u16, sock_type: u32, protocol: u32, sv: &mut [i32; 2]) -> i64 {
+    unsafe {
+        syscall4(
+            SYS_SOCKETPAIR,
+            domain as u64,
+            sock_type as u64,
+            protocol as u64,
+            sv.as_mut_ptr() as u64,
+        ) as i64
+    }
 }
 
 #[macro_export]

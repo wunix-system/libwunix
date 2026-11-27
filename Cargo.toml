@@ -7,3 +7,4 @@ description = "Системная библиотека рантайма Rust д�
 license = "MIT"
 
 [dependencies]
+wunix-drv = { path = "../wunix-drv" }
